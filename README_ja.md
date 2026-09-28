@@ -2,13 +2,15 @@
 
 羽ばたき飛行機の代表的な駆動機構である 4節対称リンク機構（クランク・ロッカー機構） を、ブラウザ上で直感的に設計・幾何学検証できるWebベースの2D-CADシミュレーターです。
 
-HTMLファイル（`index.html`）単体で完結しているので、ブラウザでファイルを開くだけ、またはGitHub Pagesへのアクセス（https://ys-lavic.github.io/OrnithoLinker/）で動作します。
+HTMLファイル（`index.html`）単体で完結しているので、ブラウザでファイルを開くだけ、またはGitHub Pagesへのアクセスで動作します。
+  https://ys-lavic.github.io/OrnithoLinker/
 
 ---
 
 ## 📸 画面プレビュー
 
 ![シミュレータ画面](assets/screenshot1_jp.png)
+
 ![シミュレータ画面](assets/screenshot2_jp.png)
 
 ---
