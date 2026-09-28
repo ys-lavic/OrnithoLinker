@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OrnithoLinker</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* スクロールバーカスタム */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    input[type=range] { accent-color: #38bdf8; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen overflow-hidden flex flex-col font-sans select-none">
+
+  <!-- ヘッダーバー -->
+  <header class="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between flex-shrink-0 z-20">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-sky-600/30">
+        <i class="fa-solid fa-dove"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-sm sm:text-base leading-tight tracking-wide text-slate-100 flex items-center gap-2">
+          <span data-i18n="appTitle">OrnithoLinker</span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-sky-950 text-sky-400 border border-sky-800 font-mono">CAD v3.7</span>
+        </h1>
+      </div>
+    </div>
+
+    <!-- 右側ボタングループ & 言語切り替え -->
+    <div class="flex items-center space-x-2">
+      <button id="btnLangToggle" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-amber-400 border border-slate-700 rounded transition flex items-center gap-1 shadow-sm">
+        <i class="fa-solid fa-globe"></i>
+        <span id="langLabel">JA</span>
+      </button>
+
+      <button id="btnSlotsModal" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-sky-300 border border-slate-700 rounded transition flex items-center gap-1.5 shadow-sm">
+        <i class="fa-solid fa-floppy-disk"></i>
+        <span data-i18n="btnSlots">スロット保存</span>
+      </button>
+      <button id="btnExportJson" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 rounded transition flex items-center gap-1.5">
+        <i class="fa-solid fa-file-export"></i>
+        <span class="hidden sm:inline" data-i18n="btnExportJson">JSON保存</span>
+      </button>
+      <label class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 rounded transition cursor-pointer flex items-center gap-1.5">
+        <i class="fa-solid fa-file-import"></i>
+        <span class="hidden sm:inline" data-i18n="btnImportJson">JSON読込</span>
+        <input type="file" id="fileInputJson" accept=".json" class="hidden">
+      </label>
+      <button id="btnExportImage" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 rounded transition flex items-center gap-1.5" title="PNG画像保存">
+        <i class="fa-solid fa-camera"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- メインワークスペース -->
+  <main class="flex-1 flex overflow-hidden relative">
+
+    <!-- 左側エリア: CAD機構ビュー + 下部リアルタイム波形グラフ -->
+    <div class="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative border-r border-slate-800">
+
+      <!-- 上部: CAD機構シミュレーション Canvas (min-h-0 で安全に伸縮) -->
+      <div id="canvasContainer" class="flex-1 min-h-0 relative bg-slate-950 overflow-hidden cursor-grab active:cursor-grabbing">
+        <canvas id="mechCanvas" class="block"></canvas>
+
+        <!-- 浮遊ステータス ＆ HUDモニター -->
+        <div class="absolute top-3 left-3 flex flex-col gap-2 pointer-events-none z-10">
+          <div id="statusBadge" class="px-3 py-1.5 rounded-md bg-emerald-950/80 border border-emerald-600/50 text-emerald-300 text-xs font-mono flex items-center gap-2 backdrop-blur shadow-lg">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="statusText" data-i18n="statusValid">機構正常 (Grashof条件 成立)</span>
+          </div>
+
+          <!-- 左右独立 HUDモニター -->
+          <div class="bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-xs font-mono shadow-2xl backdrop-blur flex gap-4 pointer-events-auto">
+            <!-- 左翼 HUD -->
+            <div class="border-l-2 border-purple-400 pl-2">
+              <div class="text-purple-300 font-bold flex items-center justify-between gap-3 text-[11px]">
+                <span data-i18n="hudLeft">左翼 (Left)</span>
+                <span id="hudLeftAngle" class="text-white text-xs">0.0°</span>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5">
+                <div><span data-i18n="hudMaxUp">上方Max</span>: <span id="hudLeftMaxUp" class="text-purple-300 font-semibold">0.0°</span></div>
+                <div><span data-i18n="hudMaxDown">下方Max</span>: <span id="hudLeftMaxDown" class="text-purple-300 font-semibold">0.0°</span></div>
+                <div><span data-i18n="hudStroke">全振幅</span>: <span id="hudLeftStroke" class="text-slate-200 font-semibold">0.0°</span></div>
+                <div><span data-i18n="hudQR">QR比</span>: <span id="hudLeftQR" class="text-amber-300 font-semibold">1:1.00</span></div>
+              </div>
+              <div class="text-[9px] text-slate-400 mt-0.5">
+                <span data-i18n="hudTimeRatio">上昇/下降時間比</span>: <span id="hudLeftTimeRatio" class="text-amber-300">50% / 50%</span>
+              </div>
+            </div>
+
+            <!-- 右翼 HUD -->
+            <div class="border-l-2 border-sky-400 pl-2">
+              <div class="text-sky-300 font-bold flex items-center justify-between gap-3 text-[11px]">
+                <span data-i18n="hudRight">右翼 (Right)</span>
+                <span id="hudRightAngle" class="text-white text-xs">0.0°</span>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5">
+                <div><span data-i18n="hudMaxUp">上方Max</span>: <span id="hudRightMaxUp" class="text-sky-300 font-semibold">0.0°</span></div>
+                <div><span data-i18n="hudMaxDown">下方Max</span>: <span id="hudRightMaxDown" class="text-sky-300 font-semibold">0.0°</span></div>
+                <div><span data-i18n="hudStroke">全振幅</span>: <span id="hudRightStroke" class="text-slate-200 font-semibold">0.0°</span></div>
+                <div><span data-i18n="hudQR">QR比</span>: <span id="hudRightQR" class="text-amber-300 font-semibold">1:1.00</span></div>
+              </div>
+              <div class="text-[9px] text-slate-400 mt-0.5">
+                <span data-i18n="hudTimeRatio">上昇/下降時間比</span>: <span id="hudRightTimeRatio" class="text-amber-300">50% / 50%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 画面操作 & 手動クランク角シークバー -->
+        <div id="floatingToolbar" class="absolute bottom-3 right-3 flex items-center bg-slate-900/90 border border-slate-700 rounded-lg p-1.5 text-slate-300 shadow-xl backdrop-blur gap-2 z-10 cursor-default">
+          <div class="flex items-center gap-1.5 px-1 border-r border-slate-800 pr-2">
+            <span class="text-[10px] text-slate-400 font-mono" data-i18n="labelCrankAngle">クランク角:</span>
+            <input type="range" id="seekCrankAngle" min="0" max="360" step="1" value="0" class="w-24 sm:w-32 h-1.5 bg-slate-800 rounded cursor-pointer">
+            <span id="labelCurrentAngle" class="text-[10px] text-sky-400 font-mono w-9 text-right">0°</span>
+          </div>
+
+          <button id="btnTogglePlay" class="w-7 h-7 flex items-center justify-center bg-sky-600 hover:bg-sky-500 text-white rounded transition text-xs" title="再生 / 一時停止">
+            <i id="playIcon" class="fa-solid fa-pause"></i>
+          </button>
+          <button id="btnStepFrame" class="w-7 h-7 flex items-center justify-center hover:bg-slate-800 rounded transition text-xs" title="コマ送り (+5°)">
+            <i class="fa-solid fa-forward-step"></i>
+          </button>
+          <div class="w-px h-4 bg-slate-700 mx-0.5"></div>
+          <button id="btnZoomIn" class="w-7 h-7 flex items-center justify-center hover:bg-slate-800 rounded transition text-xs" title="ズームイン">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+          <button id="btnZoomOut" class="w-7 h-7 flex items-center justify-center hover:bg-slate-800 rounded transition text-xs" title="ズームアウト">
+            <i class="fa-solid fa-minus"></i>
+          </button>
+          <button id="btnResetView" class="w-7 h-7 flex items-center justify-center hover:bg-slate-800 rounded transition text-xs" title="視点リセット">
+            <i class="fa-solid fa-arrows-to-dot"></i>
+          </button>
+        </div>
+
+        <!-- 水平基準線 & 角度定義ガイド -->
+        <div class="absolute bottom-3 left-3 bg-slate-900/80 border border-slate-800 rounded px-2.5 py-1 text-[10px] text-slate-400 pointer-events-none flex items-center gap-2 font-mono">
+          <span class="text-sky-400" data-i18n="guideRight">● 右翼: 反時計(+) / 水平 0° / 時計(-)</span>
+          <span class="text-slate-600">|</span>
+          <span class="text-purple-400" data-i18n="guideLeft">● 左翼: 時計(+) / 水平 0° / 反時計(-)</span>
+        </div>
+      </div>
+
+      <!-- 下部: 左右翼端 角度変位波形グラフ (見切れ対策済 Flex構造) -->
+      <div class="h-48 sm:h-52 bg-slate-900/95 border-t border-slate-800 flex flex-col flex-shrink-0 relative overflow-hidden">
+        <!-- グラフタイトルバー (h-6 固定) -->
+        <div class="h-6 px-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono flex-shrink-0">
+          <div class="flex items-center gap-3">
+            <span class="font-bold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-chart-line text-sky-400"></i>
+              <span data-i18n="graphTitle">左右翼端 角度変位波形 (中心 0°)</span>
+            </span>
+            <span class="flex items-center gap-1 text-sky-400 font-semibold"><span class="w-2.5 h-0.5 bg-sky-400 inline-block"></span> <span data-i18n="graphRight">右翼角度</span></span>
+            <span class="flex items-center gap-1 text-purple-400 font-semibold"><span class="w-2.5 h-0.5 bg-purple-400 inline-block border-b border-dashed"></span> <span data-i18n="graphLeft">左翼角度</span></span>
+          </div>
+          <div class="text-[10px] text-slate-500">
+            <span data-i18n="graphAxisNote">横軸: クランク回転角 (0°〜720°) / 縦軸中央: 水平 0°</span>
+          </div>
+        </div>
+        <!-- Canvasラッパー: min-h-0 が必須 (オーバーフロー完全防止) -->
+        <div id="graphContainer" class="flex-1 min-h-0 relative bg-slate-950 overflow-hidden">
+          <canvas id="graphCanvas" class="block"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 右側エリア: 幾何・剛体パラメータ設定パネル -->
+    <aside class="w-80 sm:w-96 bg-slate-900 flex flex-col h-full flex-shrink-0 overflow-hidden shadow-2xl z-10 border-l border-slate-800">
+      
+      <!-- 設定タブ / プリセット選択 -->
+      <div class="p-3 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+          <i class="fa-solid fa-sliders text-sky-400"></i> <span data-i18n="panelTitle">機構・剛体パラメータ</span>
+        </span>
+        <select id="presetSelect" class="bg-slate-800 border border-slate-700 text-xs text-sky-300 rounded px-2 py-1 outline-none hover:border-sky-500 cursor-pointer">
+          <option value="rubber" data-i18n="optRubber">ゴム動力機</option>
+          <option value="single" data-i18n="optSingle">シングルクランク</option>
+          <option value="dual" data-i18n="optDual">デュアルクランク</option>
+        </select>
+      </div>
+
+      <!-- パラメータコントロール -->
+      <div class="flex-1 overflow-y-auto p-3.5 space-y-4 text-xs">
+
+        <!-- 駆動・回転設定 -->
+        <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800 space-y-3">
+          <div class="text-xs font-semibold text-sky-400 border-b border-slate-800 pb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-arrows-spin"></i> <span data-i18n="secMotor">駆動・回転連動</span></span>
+            <span class="text-[10px] text-slate-500">Motor Dynamics</span>
+          </div>
+
+          <!-- 回転方向 CW / CCW -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-[11px] text-slate-400 mb-1 block" data-i18n="lblMotorDir">モーター回転方向</label>
+              <div class="grid grid-cols-2 gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-[11px]">
+                <button id="btnDirCW" class="py-1 rounded font-mono transition text-slate-400 hover:text-white flex items-center justify-center gap-1">
+                  <i class="fa-solid fa-rotate-right"></i> CW
+                </button>
+                <button id="btnDirCCW" class="py-1 rounded font-mono bg-sky-600 text-white font-bold flex items-center justify-center gap-1">
+                  <i class="fa-solid fa-rotate-left"></i> CCW
+                </button>
+              </div>
+            </div>
+
+            <!-- 左右クランク連動方式 -->
+            <div>
+              <label class="text-[11px] text-slate-400 mb-1 block" data-i18n="lblCrankMode">クランク連動方式</label>
+              <div class="grid grid-cols-2 gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-[10px]">
+                <button id="btnModeCounter" class="py-1 rounded font-medium bg-sky-600 text-white font-bold flex items-center justify-center gap-0.5">
+                  <i class="fa-solid fa-code-compare"></i> <span data-i18n="btnCounter">逆回転</span>
+                </button>
+                <button id="btnModeSame" class="py-1 rounded font-medium text-slate-400 hover:text-white flex items-center justify-center gap-0.5">
+                  <i class="fa-solid fa-arrow-right-arrow-left"></i> <span data-i18n="btnSame">同方向</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- クランク軸間距離 -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span class="font-medium" data-i18n="lblCrankDist">クランク軸間距離 (D_crank)</span>
+              <span class="font-mono text-sky-400" id="val_crankDist">0 mm</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="range" id="param_crankDist" min="0" max="60" step="1" value="0" class="flex-1 h-1.5 bg-slate-800 rounded-lg">
+              <input type="number" id="num_crankDist" min="0" max="60" step="1" value="0" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+            <div class="text-[10px] text-slate-500 mt-0.5" data-i18n="noteCrankDist">※0で同軸単一クランク。分離時は左右中心が ±D/2 に配置</div>
+          </div>
+
+          <!-- 左右クランク位相差 -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span class="font-medium" data-i18n="lblPhaseOffset">左右クランク位相差 (ΔΦ)</span>
+              <span class="font-mono text-purple-400" id="val_phaseOffset">0°</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="range" id="param_phaseOffset" min="-180" max="180" step="1" value="0" class="flex-1 h-1.5 bg-slate-800 rounded-lg">
+              <input type="number" id="num_phaseOffset" min="-180" max="180" step="1" value="0" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+            <div class="flex gap-1.5 mt-1.5">
+              <button class="btnQuickPhase flex-1 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded text-[10px] text-slate-300" data-phase="0">0° (対称)</button>
+              <button class="btnQuickPhase flex-1 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded text-[10px] text-slate-300" data-phase="90">90°</button>
+              <button class="btnQuickPhase flex-1 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded text-[10px] text-slate-300" data-phase="180">180° (逆位相)</button>
+            </div>
+          </div>
+
+          <!-- 羽ばたき周波数 -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span data-i18n="lblFreq">羽ばたき周波数 (速度)</span>
+              <span class="font-mono text-sky-400" id="val_freq">2.0 Hz (120 RPM)</span>
+            </div>
+            <input type="range" id="param_freq" min="0.2" max="10.0" step="0.1" value="2.0" class="w-full h-1.5 bg-slate-800 rounded-lg">
+          </div>
+        </div>
+
+        <!-- 4節リンク寸法 -->
+        <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800 space-y-3">
+          <div class="text-xs font-semibold text-emerald-400 border-b border-slate-800 pb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-bezier-curve"></i> <span data-i18n="secGeometry">リンク寸法</span></span>
+            <span class="text-[10px] text-slate-500">Link Lengths</span>
+          </div>
+
+          <!-- クランク長 (r) -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span data-i18n="lblCrank">クランク半径 (r)</span>
+              <span class="font-mono text-sky-400" id="val_crank">15 mm</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="range" id="param_crank" min="5" max="60" step="0.5" value="15" class="flex-1 h-1.5 bg-slate-800 rounded-lg">
+              <input type="number" id="num_crank" min="5" max="60" step="0.5" value="15" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+          </div>
+
+          <!-- ロッド長 (L_rod) -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span data-i18n="lblRod">コネクティングロッド長 (L_rod)</span>
+              <span class="font-mono text-sky-400" id="val_rod">55 mm</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="range" id="param_rod" min="20" max="150" step="1" value="55" class="flex-1 h-1.5 bg-slate-800 rounded-lg">
+              <input type="number" id="num_rod" min="20" max="150" step="1" value="55" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+          </div>
+
+          <!-- ロッカーアーム長 (L_rocker) -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span data-i18n="lblRocker">ロッカー駆動レバー長 (L_rocker)</span>
+              <span class="font-mono text-sky-400" id="val_rocker">35 mm</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="range" id="param_rocker" min="15" max="100" step="1" value="35" class="flex-1 h-1.5 bg-slate-800 rounded-lg">
+              <input type="number" id="num_rocker" min="15" max="100" step="1" value="35" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+          </div>
+
+          <!-- 支点位置 Dx, Dy -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span data-i18n="lblPivotDx">支点水平 (Dx)</span>
+                <span class="font-mono text-sky-400" id="val_pivotDx">30 mm</span>
+              </div>
+              <input type="number" id="num_pivotDx" min="10" max="120" step="1" value="30" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span data-i18n="lblPivotDy">支点高さ (Dy)</span>
+                <span class="font-mono text-sky-400" id="val_pivotDy">45 mm</span>
+              </div>
+              <input type="number" id="num_pivotDy" min="10" max="140" step="1" value="45" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- 剛体ベルクランク＆主翼 -->
+        <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800 space-y-3">
+          <div class="text-xs font-semibold text-amber-400 border-b border-slate-800 pb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-shapes"></i> <span data-i18n="secWing">剛体ベルクランク・主翼構造</span></span>
+            <span class="text-[10px] text-slate-500">Wing & Spar</span>
+          </div>
+
+          <!-- 取付角 (剛体アングル Δφ) -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span data-i18n="lblHornAngle">主翼とレバーの取付角 (Δφ)</span>
+              <span class="font-mono text-amber-400" id="val_hornAngle">85°</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="range" id="param_hornAngle" min="0" max="180" step="1" value="85" class="flex-1 h-1.5 bg-slate-800 rounded-lg">
+              <input type="number" id="num_hornAngle" min="0" max="180" step="1" value="85" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+            <div class="text-[10px] text-slate-500 mt-0.5" data-i18n="noteHornAngle">※レバーと主翼は剛体一体化され、外向きに正しく保持されます</div>
+          </div>
+
+          <!-- 主翼スパー長 -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span data-i18n="lblSpar">主翼スパー長 (翼長)</span>
+              <span class="font-mono text-sky-400" id="val_spar">160 mm</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="range" id="param_spar" min="50" max="350" step="5" value="160" class="flex-1 h-1.5 bg-slate-800 rounded-lg">
+              <input type="number" id="num_spar" min="50" max="350" step="5" value="160" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs">
+            </div>
+          </div>
+
+          <!-- 翼膜柔軟性 -->
+          <div>
+            <div class="flex justify-between text-slate-300 mb-1">
+              <span data-i18n="lblFlexibility">柔軟翼膜の位相遅れ</span>
+              <span class="font-mono text-sky-400" id="val_flexibility">35%</span>
+            </div>
+            <input type="range" id="param_flexibility" min="0" max="100" step="5" value="35" class="w-full h-1.5 bg-slate-800 rounded-lg">
+          </div>
+        </div>
+
+        <!-- 表示設定 -->
+        <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800 space-y-2">
+          <div class="text-xs font-semibold text-slate-400 border-b border-slate-800 pb-1" data-i18n="secToggles">表示設定</div>
+          <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-300 pt-1">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chkShowMembrane" checked class="rounded bg-slate-800 border-slate-700 text-sky-500">
+              <span data-i18n="chkMembrane">柔軟翼膜</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chkShowTrace" checked class="rounded bg-slate-800 border-slate-700 text-sky-500">
+              <span data-i18n="chkTrace">翼端軌跡</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chkShowPlate" checked class="rounded bg-slate-800 border-slate-700 text-sky-500">
+              <span data-i18n="chkPlate">剛体プレート</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chkShowGrid" checked class="rounded bg-slate-800 border-slate-700 text-sky-500">
+              <span data-i18n="chkGrid">CADグリッド</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chkShowGears" checked class="rounded bg-slate-800 border-slate-700 text-sky-500">
+              <span data-i18n="chkGears">ピッチ円・矢印</span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 下部フッター -->
+      <div class="p-3 border-t border-slate-800 bg-slate-900/90 flex justify-between items-center text-[11px]">
+        <button id="btnResetParams" class="text-slate-400 hover:text-rose-400 transition flex items-center gap-1">
+          <i class="fa-solid fa-rotate-left"></i> <span data-i18n="btnReset">初期設定に戻す</span>
+        </button>
+        <span class="text-slate-500 font-mono text-[10px]">Dual/Single 2D-CAD</span>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- スロット保存モーダル -->
+  <div id="modalSlots" class="fixed inset-0 bg-black/75 z-50 flex items-center justify-center hidden p-4 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-850">
+        <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+          <i class="fa-solid fa-floppy-disk text-sky-400"></i>
+          <span data-i18n="modalTitle">設計スロット管理 (LocalStorage)</span>
+        </h3>
+        <button id="btnCloseModal" class="text-slate-400 hover:text-white text-base">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-4 flex-1 space-y-4 text-xs">
+        <div class="flex gap-2">
+          <input type="text" id="inputNewSlotName" placeholder="設計名 (例: 最適化翼_v2)" class="flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500 font-sans">
+          <button id="btnSaveNewSlot" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-medium rounded transition flex items-center gap-1 shadow">
+            <i class="fa-solid fa-plus"></i> <span data-i18n="btnSaveCur">保存</span>
+          </button>
+        </div>
+
+        <div>
+          <label class="text-[11px] text-slate-400 mb-1.5 block font-semibold" data-i18n="lblSavedList">保存済み設計スロット一覧</label>
+          <div id="slotsListContainer" class="space-y-1.5 max-h-56 overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+
+      <div class="px-4 py-2.5 bg-slate-950 border-t border-slate-800 text-[11px] text-slate-500 flex justify-between items-center">
+        <span data-i18n="noteLocalStorage">※ブラウザ内部に自動保存されます</span>
+        <button id="btnCloseModal2" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded" data-i18n="btnClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ==========================================
+      // 1. 多言語辞書 (JA / EN)
+      // ==========================================
+      let currentLang = 'en';
+
+      const I18N = {
+        ja: {
+          appTitle: 'OrnithoLinker ',
+          btnSlots: 'スロット保存',
+          btnExportJson: 'JSON保存',
+          btnImportJson: 'JSON読込',
+          statusValid: '機構正常 (Grashof条件 成立)',
+          statusInvalid: '警告: 機構ロック (Grashof不成立)',
+          hudLeft: '左翼 (Left)',
+          hudRight: '右翼 (Right)',
+          hudMaxUp: '上方Max',
+          hudMaxDown: '下方Max',
+          hudStroke: '全振幅',
+          hudQR: 'QR比',
+          hudTimeRatio: '上昇/下降時間比',
+          labelCrankAngle: 'クランク角:',
+          guideRight: '● 右翼: 反時計(+) / 水平 0° / 時計(-)',
+          guideLeft: '● 左翼: 時計(+) / 水平 0° / 反時計(-)',
+          graphTitle: '左右翼端 角度変位波形 (中心 0°)',
+          graphRight: '右翼角度',
+          graphLeft: '左翼角度',
+          graphAxisNote: '横軸: クランク回転角 (0°〜720°) / 縦軸中央: 水平 0°',
+          panelTitle: '機構・剛体パラメータ',
+          optRubber: 'ゴム動力機',
+          optSingle: 'シングルクランク',
+          optDual: 'デュアルクランク',
+          secMotor: '駆動・回転連動',
+          lblMotorDir: 'モーター回転方向',
+          lblCrankMode: 'クランク連動方式',
+          btnCounter: '逆回転',
+          btnSame: '同方向',
+          lblCrankDist: 'クランク軸間距離 (D_crank)',
+          noteCrankDist: '※0で同軸単一クランク。分離時は左右中心が ±D/2 に配置',
+          lblPhaseOffset: '左右クランク位相差 (ΔΦ)',
+          lblFreq: '羽ばたき周波数 (速度)',
+          secGeometry: 'リンク寸法',
+          lblCrank: 'クランク半径 (r)',
+          lblRod: 'コネクティングロッド長 (L_rod)',
+          lblRocker: 'ロッカー駆動レバー長 (L_rocker)',
+          lblPivotDx: '支点水平 (Dx)',
+          lblPivotDy: '支点高さ (Dy)',
+          secWing: '剛体ベルクランク・主翼構造',
+          lblHornAngle: '主翼とレバーの取付角 (Δφ)',
+          noteHornAngle: '※レバーと主翼は剛体一体化され、外向きに正しく保持されます',
+          lblSpar: '主翼スパー長 (翼長)',
+          lblFlexibility: '柔軟翼膜の位相遅れ',
+          secToggles: '表示設定',
+          chkMembrane: '柔軟翼膜',
+          chkTrace: '翼端軌跡',
+          chkPlate: '剛体プレート',
+          chkGrid: 'CADグリッド',
+          chkGears: 'ピッチ円・矢印',
+          btnReset: '初期設定に戻す',
+          modalTitle: '設計スロット管理 (LocalStorage)',
+          btnSaveCur: '保存',
+          lblSavedList: '保存済み設計スロット一覧',
+          noteLocalStorage: '※ブラウザ内部に自動保存されます',
+          btnClose: '閉じる',
+          noSlots: '保存されたスロットはありません',
+          load: '読込',
+          delete: '削除',
+          promptSlotName: '設計名を入力してください',
+          importSuccess: '設計パラメータを正常にインポートしました',
+          importError: 'JSONファイルの読み込みに失敗しました'
+        },
+        en: {
+          appTitle: 'OrnithoLinker ',
+          btnSlots: 'Slots',
+          btnExportJson: 'Export JSON',
+          btnImportJson: 'Import JSON',
+          statusValid: 'Mechanism Valid (Grashof Passed)',
+          statusInvalid: 'Warning: Linkage Lock (Grashof Failed)',
+          hudLeft: 'Left Wing',
+          hudRight: 'Right Wing',
+          hudMaxUp: 'Max Up',
+          hudMaxDown: 'Max Down',
+          hudStroke: 'Stroke',
+          hudQR: 'QR Ratio',
+          hudTimeRatio: 'Up/Down Time Ratio',
+          labelCrankAngle: 'Crank Angle:',
+          guideRight: '● Right: CCW(+) / Horizon 0° / CW(-)',
+          guideLeft: '● Left: CW(+) / Horizon 0° / CCW(-)',
+          graphTitle: 'Wingtip Angular Displacement (Center 0°)',
+          graphRight: 'Right Wing',
+          graphLeft: 'Left Wing',
+          graphAxisNote: 'X-axis: Crank Angle (0° to 720°) / Center: 0° Horizon',
+          panelTitle: 'Kinematic & Rigid Body Parameters',
+          optRubber: 'Rubber-Powered',
+          optSingle: 'Single-Crank RC',
+          optDual: 'Dual-Crank Gear',
+          secMotor: 'Drive & Motor Dynamics',
+          lblMotorDir: 'Motor Direction',
+          lblCrankMode: 'Coupling Mode',
+          btnCounter: 'Counter-Rot',
+          btnSame: 'Co-Rotating',
+          lblCrankDist: 'Crank Separation (D_crank)',
+          noteCrankDist: '*0 = Coaxial single crank. Non-zero places centers at ±D/2',
+          lblPhaseOffset: 'Crank Phase Offset (ΔΦ)',
+          lblFreq: 'Flapping Frequency',
+          secGeometry: '4-Bar Link Lengths',
+          lblCrank: 'Crank Radius (r)',
+          lblRod: 'Connecting Rod (L_rod)',
+          lblRocker: 'Rocker Lever (L_rocker)',
+          lblPivotDx: 'Pivot Horizontal (Dx)',
+          lblPivotDy: 'Pivot Vertical (Dy)',
+          secWing: 'Rigid Bellcrank & Spar',
+          lblHornAngle: 'Horn Relative Angle (Δφ)',
+          noteHornAngle: '*Lever and spar are rigidly unified pointing outwards',
+          lblSpar: 'Spar Length (Wing Span)',
+          lblFlexibility: 'Membrane Phase Lag',
+          secToggles: 'Display Toggles',
+          chkMembrane: 'Membrane',
+          chkTrace: 'Tip Trace',
+          chkPlate: 'Rigid Horn Plate',
+          chkGrid: 'CAD Grid',
+          chkGears: 'Pitch Circles & Arrows',
+          btnReset: 'Reset to Defaults',
+          modalTitle: 'Design Slots (LocalStorage)',
+          btnSaveCur: 'Save Current',
+          lblSavedList: 'Saved Design Slots',
+          noteLocalStorage: '*Saved locally in browser memory',
+          btnClose: 'Close',
+          noSlots: 'No saved slots found',
+          load: 'Load',
+          delete: 'Delete',
+          promptSlotName: 'Please enter a design name',
+          importSuccess: 'Design parameters imported successfully',
+          importError: 'Failed to read JSON file'
+        }
+      };
+
+      function updateLanguageUI() {
+        const dict = I18N[currentLang];
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+          const key = el.dataset.i18n;
+          if (dict[key]) el.textContent = dict[key];
+        });
+        document.getElementById('langLabel').textContent = currentLang === 'ja' ? 'EN' : 'JA';
+      }
+
+      // ==========================================
+      // 2. システム状態 & プリセット定義
+      // ==========================================
+      const state = {
+        crank: 15.0,
+        rod: 55.0,
+        rocker: 35.0,
+        pivotDx: 30.0,
+        pivotDy: 45.0,
+        hornAngle: 85.0,
+        spar: 160.0,
+        
+        crankDist: 0.0,
+        phaseOffset: 0.0,
+        motorDir: 1,
+        coupleMode: 'counter',
+        freq: 2.0,
+        flexibility: 35,
+
+        showMembrane: true,
+        showTrace: true,
+        showPlate: true,
+        showGrid: true,
+        showGears: true,
+
+        running: true,
+        theta: 0.0,
+        lastTimestamp: 0,
+        isGrashofValid: true,
+
+        prevWingAngleR: 0,
+        prevWingAngleL: 0,
+        wingVelR: 0,
+        wingVelL: 0,
+
+        zoom: 1.6,
+        panX: 0,
+        panY: 30,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+
+        traceR: [],
+        traceL: []
+      };
+
+      const PRESETS = {
+        rubber: {
+          crank: 7.0, rod: 48.0, rocker: 20.0, pivotDx: 10.0, pivotDy: 60.0,
+          hornAngle: 115.0, spar: 150.0, crankDist: 0.0, phaseOffset: 43.0,
+          motorDir: 1, coupleMode: 'same', freq: 4.0, flexibility: 45
+        },
+        single: {
+          crank: 13.0, rod: 33.0, rocker: 32.0, pivotDx: 30.0, pivotDy: 30.0,
+          hornAngle: 95.0, spar: 180.0, crankDist: 0.0, phaseOffset: 180.0,
+          motorDir: 1, coupleMode: 'same', freq: 2.0, flexibility: 35
+        },
+        dual: {
+          crank: 15.0, rod: 33.0, rocker: 32.0, pivotDx: 30.0, pivotDy: 25.0,
+          hornAngle: 133.0, spar: 180.0, crankDist: 35.0, phaseOffset: 180.0,
+          motorDir: 1, coupleMode: 'counter', freq: 2.0, flexibility: 35
+        }
+      };
+
+      // DOM要素キャッシュ
+      const mechCanvas = document.getElementById('mechCanvas');
+      const ctxMech = mechCanvas.getContext('2d');
+      const graphCanvas = document.getElementById('graphCanvas');
+      const ctxGraph = graphCanvas.getContext('2d');
+      const canvasContainer = document.getElementById('canvasContainer');
+      const graphContainer = document.getElementById('graphContainer');
+      const floatingToolbar = document.getElementById('floatingToolbar');
+
+      const hudRightAngle = document.getElementById('hudRightAngle');
+      const hudRightMaxUp = document.getElementById('hudRightMaxUp');
+      const hudRightMaxDown = document.getElementById('hudRightMaxDown');
+      const hudRightStroke = document.getElementById('hudRightStroke');
+      const hudRightQR = document.getElementById('hudRightQR');
+      const hudRightTimeRatio = document.getElementById('hudRightTimeRatio');
+
+      const hudLeftAngle = document.getElementById('hudLeftAngle');
+      const hudLeftMaxUp = document.getElementById('hudLeftMaxUp');
+      const hudLeftMaxDown = document.getElementById('hudLeftMaxDown');
+      const hudLeftStroke = document.getElementById('hudLeftStroke');
+      const hudLeftQR = document.getElementById('hudLeftQR');
+      const hudLeftTimeRatio = document.getElementById('hudLeftTimeRatio');
+
+      const statusBadge = document.getElementById('statusBadge');
+      const statusText = document.getElementById('statusText');
+      const playIcon = document.getElementById('playIcon');
+      const seekCrankAngle = document.getElementById('seekCrankAngle');
+      const labelCurrentAngle = document.getElementById('labelCurrentAngle');
+
+      // ==========================================
+      // 3. 機構幾何学解析エンジン
+      // ==========================================
+      function getCrankAngles(theta) {
+        const dir = state.motorDir; 
+        const baseAngle = dir * theta;
+        const thetaR = baseAngle;
+        const phaseRad = (state.phaseOffset * Math.PI) / 180;
+        let thetaL;
+        if (state.coupleMode === 'counter') {
+          thetaL = -dir * theta + phaseRad;
+        } else {
+          thetaL = baseAngle + phaseRad;
+        }
+        return { thetaR, thetaL };
+      }
+
+      function solveWingLoop(side, crankAngle) {
+        const isRight = (side === 'R');
+
+        const halfDist = state.crankDist / 2;
+        const cx = isRight ? halfDist : -halfDist;
+        const cy = 0;
+
+        const r = state.crank;
+        const j1x = cx + r * Math.cos(crankAngle);
+        const j1y = cy + r * Math.sin(crankAngle);
+
+        const px = isRight ? state.pivotDx : -state.pivotDx;
+        const py = state.pivotDy;
+
+        const dx = j1x - px;
+        const dy = j1y - py;
+        const D = Math.hypot(dx, dy);
+
+        const L_rod = state.rod;
+        const L_rocker = state.rocker;
+
+        if (D > (L_rod + L_rocker) || D < Math.abs(L_rod - L_rocker) || D < 1e-5) {
+          return null;
+        }
+
+        const cosAlpha = (D * D + L_rocker * L_rocker - L_rod * L_rod) / (2 * D * L_rocker);
+        const clampedCosAlpha = Math.max(-1, Math.min(1, cosAlpha));
+        const alpha = Math.acos(clampedCosAlpha);
+        const gamma = Math.atan2(j1y - py, j1x - px);
+
+        let leverAngle;
+        if (isRight) {
+          leverAngle = gamma + alpha;
+        } else {
+          leverAngle = gamma - alpha;
+        }
+
+        const j2x = px + L_rocker * Math.cos(leverAngle);
+        const j2y = py + L_rocker * Math.sin(leverAngle);
+
+        // 剛体ベルクランク & 主翼スパー方位角 (外向き展開)
+        const hornRad = (state.hornAngle * Math.PI) / 180;
+        let sparOrientation;
+        if (isRight) {
+          sparOrientation = leverAngle - hornRad + Math.PI;
+        } else {
+          sparOrientation = leverAngle + hornRad - Math.PI;
+        }
+
+        const L_spar = state.spar;
+        const tipX = px + L_spar * Math.cos(sparOrientation);
+        const tipY = py + L_spar * Math.sin(sparOrientation);
+
+        const tipRelX = tipX - px;
+        const tipRelY = tipY - py;
+
+        let wingAngleDeg;
+        if (isRight) {
+          wingAngleDeg = Math.atan2(tipRelY, tipRelX) * (180 / Math.PI);
+        } else {
+          wingAngleDeg = Math.atan2(tipRelY, -tipRelX) * (180 / Math.PI);
+        }
+
+        return {
+          valid: true,
+          C: { x: cx, y: cy },
+          J1: { x: j1x, y: j1y },
+          P: { x: px, y: py },
+          J2: { x: j2x, y: j2y },
+          Tip: { x: tipX, y: tipY },
+          leverAngle,
+          sparOrientation,
+          wingAngleDeg
+        };
+      }
+
+      let cachedPerformance = null;
+
+      function analyzeKinematics() {
+        const steps = 360;
+        const rightAngles = [];
+        const leftAngles = [];
+        let allValid = true;
+
+        for (let i = 0; i <= steps; i++) {
+          const testTheta = (i * 2 * Math.PI) / steps;
+          const { thetaR, thetaL } = getCrankAngles(testTheta);
+
+          const solR = solveWingLoop('R', thetaR);
+          const solL = solveWingLoop('L', thetaL);
+
+          if (!solR || !solL) {
+            allValid = false;
+            break;
+          }
+
+          rightAngles.push({ theta: testTheta, angle: solR.wingAngleDeg });
+          leftAngles.push({ theta: testTheta, angle: solL.wingAngleDeg });
+        }
+
+        state.isGrashofValid = allValid;
+
+        if (!allValid || rightAngles.length === 0) {
+          cachedPerformance = {
+            valid: false,
+            right: { maxUp: 0, maxDown: 0, stroke: 0, qrRatio: 'N/A', timeRatioStr: '0% / 0%' },
+            left: { maxUp: 0, maxDown: 0, stroke: 0, qrRatio: 'N/A', timeRatioStr: '0% / 0%' },
+            profileR: [],
+            profileL: []
+          };
+          return cachedPerformance;
+        }
+
+        const analyzeProfile = (arr) => {
+          let maxUp = -Infinity;
+          let maxDown = Infinity;
+          let idxMax = 0;
+          let idxMin = 0;
+
+          for (let i = 0; i < arr.length - 1; i++) {
+            const a = arr[i].angle;
+            if (a > maxUp) { maxUp = a; idxMax = i; }
+            if (a < maxDown) { maxDown = a; idxMin = i; }
+          }
+
+          const stroke = maxUp - maxDown;
+          const totalPts = arr.length - 1;
+
+          let upSteps, downSteps;
+          if (idxMax >= idxMin) {
+            upSteps = idxMax - idxMin;
+            downSteps = totalPts - upSteps;
+          } else {
+            downSteps = idxMin - idxMax;
+            upSteps = totalPts - downSteps;
+          }
+
+          const qrVal = (downSteps > 0 && upSteps > 0) ? (downSteps / upSteps) : 1.0;
+          const upPct = Math.round((upSteps / totalPts) * 100);
+          const downPct = 100 - upPct;
+          const timeRatioStr = `${upPct}% / ${downPct}%`;
+          const qrRatioStr = `1:${qrVal.toFixed(2)}`;
+
+          return { maxUp, maxDown, stroke, qrRatio: qrRatioStr, timeRatioStr };
+        };
+
+        const resR = analyzeProfile(rightAngles);
+        const resL = analyzeProfile(leftAngles);
+
+        cachedPerformance = {
+          valid: true,
+          right: resR,
+          left: resL,
+          profileR: rightAngles,
+          profileL: leftAngles
+        };
+
+        return cachedPerformance;
+      }
+
+      // ==========================================
+      // 4. UI更新 & HUDモニター
+      // ==========================================
+      function updateHUD(curSolR, curSolL) {
+        const dict = I18N[currentLang];
+
+        if (!state.isGrashofValid) {
+          statusBadge.className = 'px-3 py-1.5 rounded-md bg-rose-950/90 border border-rose-600 text-rose-300 text-xs font-mono flex items-center gap-2 backdrop-blur shadow-lg';
+          statusText.textContent = dict.statusInvalid;
+          return;
+        }
+
+        statusBadge.className = 'px-3 py-1.5 rounded-md bg-emerald-950/80 border border-emerald-600/50 text-emerald-300 text-xs font-mono flex items-center gap-2 backdrop-blur shadow-lg';
+        statusText.textContent = dict.statusValid;
+
+        const perf = cachedPerformance;
+        if (!perf || !perf.valid) return;
+
+        if (curSolR) {
+          const signR = curSolR.wingAngleDeg >= 0 ? '+' : '';
+          hudRightAngle.textContent = `${signR}${curSolR.wingAngleDeg.toFixed(1)}°`;
+        }
+        hudRightMaxUp.textContent = `${perf.right.maxUp.toFixed(1)}°`;
+        hudRightMaxDown.textContent = `${perf.right.maxDown.toFixed(1)}°`;
+        hudRightStroke.textContent = `${perf.right.stroke.toFixed(1)}°`;
+        hudRightQR.textContent = perf.right.qrRatio;
+        hudRightTimeRatio.textContent = perf.right.timeRatioStr;
+
+        if (curSolL) {
+          const signL = curSolL.wingAngleDeg >= 0 ? '+' : '';
+          hudLeftAngle.textContent = `${signL}${curSolL.wingAngleDeg.toFixed(1)}°`;
+        }
+        hudLeftMaxUp.textContent = `${perf.left.maxUp.toFixed(1)}°`;
+        hudLeftMaxDown.textContent = `${perf.left.maxDown.toFixed(1)}°`;
+        hudLeftStroke.textContent = `${perf.left.stroke.toFixed(1)}°`;
+        hudLeftQR.textContent = perf.left.qrRatio;
+        hudLeftTimeRatio.textContent = perf.left.timeRatioStr;
+
+        const curDeg = Math.round(((state.theta % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)) * (180 / Math.PI));
+        labelCurrentAngle.textContent = `${curDeg}°`;
+        if (state.running) {
+          seekCrankAngle.value = curDeg;
+        }
+      }
+
+      // ==========================================
+      // 5. メインCADキャンバス レンダラー
+      // ==========================================
+      function renderCAD(solR, solL) {
+        const cw = canvasContainer.clientWidth;
+        const ch = canvasContainer.clientHeight;
+        if (cw <= 0 || ch <= 0) return;
+
+        ctxMech.save();
+        ctxMech.clearRect(0, 0, cw, ch);
+
+        const cx0 = cw / 2 + state.panX;
+        const cy0 = ch / 2 + state.panY;
+
+        if (state.showGrid) {
+          drawGrid(ctxMech, cw, ch, cx0, cy0, state.zoom);
+        }
+
+        ctxMech.translate(cx0, cy0);
+        ctxMech.scale(state.zoom, -state.zoom);
+
+        // 水平基準線
+        ctxMech.lineWidth = 1 / state.zoom;
+        ctxMech.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+        ctxMech.setLineDash([4 / state.zoom, 4 / state.zoom]);
+        ctxMech.beginPath();
+        ctxMech.moveTo(-500, 0); ctxMech.lineTo(500, 0);
+        ctxMech.moveTo(0, -250); ctxMech.lineTo(0, 300);
+        ctxMech.stroke();
+        ctxMech.setLineDash([]);
+
+        if (state.showGears && solR && solL) {
+          drawGearGuides(ctxMech, solR, solL);
+        }
+
+        if (state.showTrace) {
+          drawTraces(ctxMech);
+        }
+
+        if (solR && solL) {
+          if (state.showMembrane) {
+            drawMembrane(ctxMech, solR, solL);
+          }
+          drawWingLinkage(ctxMech, solL, 'L');
+          drawWingLinkage(ctxMech, solR, 'R');
+          drawBaseFrame(ctxMech, solR, solL);
+        }
+
+        ctxMech.restore();
+      }
+
+      function drawGrid(ctx, w, h, ox, oy, scale) {
+        ctx.save();
+        ctx.lineWidth = 1;
+        const gridSize = 20 * scale;
+        ctx.strokeStyle = '#0f172a';
+        ctx.beginPath();
+        for (let x = (ox % gridSize); x < w; x += gridSize) {
+          ctx.moveTo(x, 0); ctx.lineTo(x, h);
+        }
+        for (let y = (oy % gridSize); y < h; y += gridSize) {
+          ctx.moveTo(0, y); ctx.lineTo(w, y);
+        }
+        ctx.stroke();
+
+        const majorGrid = 100 * scale;
+        ctx.strokeStyle = '#1e293b';
+        ctx.beginPath();
+        for (let x = (ox % majorGrid); x < w; x += majorGrid) {
+          ctx.moveTo(x, 0); ctx.lineTo(x, h);
+        }
+        for (let y = (oy % majorGrid); y < h; y += majorGrid) {
+          ctx.moveTo(0, y); ctx.lineTo(w, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawGearGuides(ctx, solR, solL) {
+        ctx.save();
+        ctx.lineWidth = 1 / state.zoom;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.setLineDash([2 / state.zoom, 2 / state.zoom]);
+        ctx.beginPath();
+        ctx.arc(solR.C.x, solR.C.y, state.crank, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
+        ctx.beginPath();
+        ctx.arc(solL.C.x, solL.C.y, state.crank, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      function drawTraces(ctx) {
+        ctx.save();
+        ctx.lineWidth = 1.5 / state.zoom;
+
+        if (state.traceR.length > 1) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+          ctx.beginPath();
+          ctx.moveTo(state.traceR[0].x, state.traceR[0].y);
+          for (let i = 1; i < state.traceR.length; i++) ctx.lineTo(state.traceR[i].x, state.traceR[i].y);
+          ctx.stroke();
+        }
+
+        if (state.traceL.length > 1) {
+          ctx.strokeStyle = 'rgba(192, 132, 252, 0.7)';
+          ctx.beginPath();
+          ctx.moveTo(state.traceL[0].x, state.traceL[0].y);
+          for (let i = 1; i < state.traceL.length; i++) ctx.lineTo(state.traceL[i].x, state.traceL[i].y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawMembrane(ctx, solR, solL) {
+        ctx.save();
+        const flex = state.flexibility / 100;
+        const chord = 45;
+
+        const lagDeflectR = -Math.max(-25, Math.min(25, state.wingVelR * 0.4)) * flex;
+        const lagDeflectL = -Math.max(-25, Math.min(25, state.wingVelL * 0.4)) * flex;
+
+        const trailRx = (solR.Tip.x + solR.P.x) / 2 + 10;
+        const trailRy = (solR.Tip.y + solR.P.y) / 2 - chord + lagDeflectR;
+
+        const gradR = ctx.createLinearGradient(solR.P.x, solR.P.y, solR.Tip.x, solR.Tip.y);
+        gradR.addColorStop(0, 'rgba(56, 189, 248, 0.28)');
+        gradR.addColorStop(1, 'rgba(56, 189, 248, 0.05)');
+        ctx.fillStyle = gradR;
+        ctx.beginPath();
+        ctx.moveTo(solR.P.x, solR.P.y);
+        ctx.lineTo(solR.Tip.x, solR.Tip.y);
+        ctx.quadraticCurveTo(trailRx, trailRy, solR.P.x, solR.P.y - 10);
+        ctx.closePath();
+        ctx.fill();
+
+        const trailLx = (solL.Tip.x + solL.P.x) / 2 - 10;
+        const trailLy = (solL.Tip.y + solL.P.y) / 2 - chord + lagDeflectL;
+
+        const gradL = ctx.createLinearGradient(solL.P.x, solL.P.y, solL.Tip.x, solL.Tip.y);
+        gradL.addColorStop(0, 'rgba(192, 132, 252, 0.28)');
+        gradL.addColorStop(1, 'rgba(192, 132, 252, 0.05)');
+        ctx.fillStyle = gradL;
+        ctx.beginPath();
+        ctx.moveTo(solL.P.x, solL.P.y);
+        ctx.lineTo(solL.Tip.x, solL.Tip.y);
+        ctx.quadraticCurveTo(trailLx, trailLy, solL.P.x, solL.P.y - 10);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      function drawWingLinkage(ctx, sol, side) {
+        const isRight = (side === 'R');
+        const mainColor = isRight ? '#38bdf8' : '#c084fc';
+        const darkColor = isRight ? '#0369a1' : '#7e22ce';
+
+        ctx.save();
+
+        // クランク (C -> J1)
+        ctx.lineWidth = 4 / state.zoom;
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(sol.C.x, sol.C.y);
+        ctx.lineTo(sol.J1.x, sol.J1.y);
+        ctx.stroke();
+
+        // コネクティングロッド (J1 -> J2)
+        ctx.lineWidth = 3 / state.zoom;
+        ctx.strokeStyle = '#94a3b8';
+        ctx.beginPath();
+        ctx.moveTo(sol.J1.x, sol.J1.y);
+        ctx.lineTo(sol.J2.x, sol.J2.y);
+        ctx.stroke();
+
+        // 剛体ベルクランクプレート (表示オン時のみ描画)
+        if (state.showPlate) {
+          const sparBaseDist = Math.min(35, state.spar * 0.25);
+          const sparBaseX = sol.P.x + sparBaseDist * Math.cos(sol.sparOrientation);
+          const sparBaseY = sol.P.y + sparBaseDist * Math.sin(sol.sparOrientation);
+
+          ctx.fillStyle = isRight ? 'rgba(56, 189, 248, 0.22)' : 'rgba(192, 132, 252, 0.22)';
+          ctx.strokeStyle = mainColor;
+          ctx.lineWidth = 2 / state.zoom;
+          ctx.beginPath();
+          ctx.moveTo(sol.P.x, sol.P.y);
+          ctx.lineTo(sol.J2.x, sol.J2.y);
+          ctx.lineTo(sparBaseX, sparBaseY);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        // ロッカーレバー骨格 (P -> J2)
+        ctx.lineWidth = 3.5 / state.zoom;
+        ctx.strokeStyle = darkColor;
+        ctx.beginPath();
+        ctx.moveTo(sol.P.x, sol.P.y);
+        ctx.lineTo(sol.J2.x, sol.J2.y);
+        ctx.stroke();
+
+        // 主翼スパー (P -> Tip)
+        ctx.lineWidth = 4.5 / state.zoom;
+        ctx.strokeStyle = mainColor;
+        ctx.beginPath();
+        ctx.moveTo(sol.P.x, sol.P.y);
+        ctx.lineTo(sol.Tip.x, sol.Tip.y);
+        ctx.stroke();
+
+        drawPin(ctx, sol.J1.x, sol.J1.y, '#f59e0b', 3.5);
+        drawPin(ctx, sol.J2.x, sol.J2.y, '#38bdf8', 3.5);
+        drawPin(ctx, sol.P.x, sol.P.y, '#ffffff', 4.5);
+        drawPin(ctx, sol.Tip.x, sol.Tip.y, mainColor, 3.0);
+
+        ctx.restore();
+      }
+
+      function drawPin(ctx, x, y, color, rMm) {
+        const radius = rMm / state.zoom;
+        ctx.save();
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, radius * 0.65, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawBaseFrame(ctx, solR, solL) {
+        ctx.save();
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 2.5 / state.zoom;
+        ctx.beginPath();
+        ctx.moveTo(solL.P.x, solL.P.y);
+        ctx.lineTo(solL.C.x, solL.C.y);
+        ctx.lineTo(solR.C.x, solR.C.y);
+        ctx.lineTo(solR.P.x, solR.P.y);
+        ctx.stroke();
+
+        drawPin(ctx, solR.C.x, solR.C.y, '#f59e0b', 4.0);
+        drawPin(ctx, solL.C.x, solL.C.y, '#f59e0b', 4.0);
+        ctx.restore();
+      }
+
+      // ==========================================
+      // 6. 下部 リアルタイム波形グラフ (見切れ対策完全版)
+      // ==========================================
+      function renderGraph(curSolR, curSolL) {
+        // graphContainer の正確な CSS ピクセル寸法を取得
+        const cw = graphContainer.clientWidth;
+        const ch = graphContainer.clientHeight;
+        if (cw <= 0 || ch <= 0) return;
+
+        ctxGraph.save();
+        ctxGraph.clearRect(0, 0, cw, ch);
+
+        // 安全マージン: 下部 24px で X 軸ラベルを余裕をもって収める
+        const margin = { top: 14, bottom: 24, left: 46, right: 18 };
+        const plotW = cw - margin.left - margin.right;
+        const plotH = ch - margin.top - margin.bottom;
+
+        if (plotW <= 0 || plotH <= 0) {
+          ctxGraph.restore();
+          return;
+        }
+
+        const perf = cachedPerformance;
+        let maxAmp = 45;
+        if (perf && perf.valid && perf.profileR.length > 0) {
+          const mR = Math.max(Math.abs(perf.right.maxUp), Math.abs(perf.right.maxDown));
+          const mL = Math.max(Math.abs(perf.left.maxUp), Math.abs(perf.left.maxDown));
+          maxAmp = Math.max(30, Math.ceil((Math.max(mR, mL) + 10) / 10) * 10);
+        }
+
+        // 縦軸中心を正確に 0° (plotH / 2) に一致させる変換
+        const valToY = (deg) => {
+          return margin.top + (plotH / 2) - (deg / maxAmp) * (plotH / 2);
+        };
+
+        // 水平ゼロ基準線
+        const yZero = valToY(0);
+        ctxGraph.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        ctxGraph.lineWidth = 1.2;
+        ctxGraph.setLineDash([4, 4]);
+        ctxGraph.beginPath();
+        ctxGraph.moveTo(margin.left, yZero);
+        ctxGraph.lineTo(cw - margin.right, yZero);
+        ctxGraph.stroke();
+        ctxGraph.setLineDash([]);
+
+        // 縦軸数値ラベル (はみ出し防止: textBaseline 指定)
+        ctxGraph.fillStyle = '#f8fafc';
+        ctxGraph.font = '10px monospace';
+        ctxGraph.textAlign = 'right';
+        ctxGraph.textBaseline = 'middle';
+        ctxGraph.fillText('0°', margin.left - 6, yZero);
+
+        ctxGraph.fillStyle = '#64748b';
+        ctxGraph.textBaseline = 'top';
+        ctxGraph.fillText(`+${maxAmp}°`, margin.left - 6, margin.top);
+        ctxGraph.textBaseline = 'bottom';
+        ctxGraph.fillText(`-${maxAmp}°`, margin.left - 6, margin.top + plotH);
+
+        // 周期グリッド線 (0°, 180°, 360°, 540°, 720°)
+        ctxGraph.strokeStyle = '#1e293b';
+        ctxGraph.textAlign = 'center';
+        ctxGraph.textBaseline = 'bottom';
+        ctxGraph.beginPath();
+        for (let i = 0; i <= 4; i++) {
+          const gx = margin.left + (i / 4) * plotW;
+          ctxGraph.moveTo(gx, margin.top);
+          ctxGraph.lineTo(gx, margin.top + plotH);
+          // ラベル描画位置: キャンバス下端から安全な距離 (ch - 4)
+          ctxGraph.fillText(`${i * 180}°`, gx, ch - 4);
+        }
+        ctxGraph.stroke();
+
+        if (!perf || !perf.valid || perf.profileR.length === 0) {
+          ctxGraph.fillStyle = '#ef4444';
+          ctxGraph.font = '11px monospace';
+          ctxGraph.textAlign = 'center';
+          ctxGraph.textBaseline = 'middle';
+          ctxGraph.fillText('Linkage Locked / 機構ロック中', cw / 2, ch / 2);
+          ctxGraph.restore();
+          return;
+        }
+
+        const totalPts = perf.profileR.length;
+
+        // 1. 右翼波形 (実線)
+        ctxGraph.strokeStyle = '#38bdf8';
+        ctxGraph.lineWidth = 2;
+        ctxGraph.beginPath();
+        for (let cycle = 0; cycle < 2; cycle++) {
+          for (let i = 0; i < totalPts; i++) {
+            const x = margin.left + ((cycle * (totalPts - 1) + i) / (2 * (totalPts - 1))) * plotW;
+            const y = valToY(perf.profileR[i].angle);
+            if (cycle === 0 && i === 0) ctxGraph.moveTo(x, y);
+            else ctxGraph.lineTo(x, y);
+          }
+        }
+        ctxGraph.stroke();
+
+        // 2. 左翼波形 (破線)
+        ctxGraph.strokeStyle = '#c084fc';
+        ctxGraph.lineWidth = 2;
+        ctxGraph.setLineDash([5, 3]);
+        ctxGraph.beginPath();
+        for (let cycle = 0; cycle < 2; cycle++) {
+          for (let i = 0; i < totalPts; i++) {
+            const x = margin.left + ((cycle * (totalPts - 1) + i) / (2 * (totalPts - 1))) * plotW;
+            const y = valToY(perf.profileL[i].angle);
+            if (cycle === 0 && i === 0) ctxGraph.moveTo(x, y);
+            else ctxGraph.lineTo(x, y);
+          }
+        }
+        ctxGraph.stroke();
+        ctxGraph.setLineDash([]);
+
+        // 3. 現在クランク角度インジケータ
+        const curNorm = ((state.theta * state.motorDir) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        const curNormRatio = curNorm / (2 * Math.PI);
+        const curX = margin.left + (curNormRatio / 2) * plotW;
+
+        ctxGraph.strokeStyle = '#f59e0b';
+        ctxGraph.lineWidth = 1.5;
+        ctxGraph.beginPath();
+        ctxGraph.moveTo(curX, margin.top);
+        ctxGraph.lineTo(curX, margin.top + plotH);
+        ctxGraph.stroke();
+
+        if (curSolR) {
+          ctxGraph.fillStyle = '#38bdf8';
+          ctxGraph.beginPath();
+          ctxGraph.arc(curX, valToY(curSolR.wingAngleDeg), 4, 0, Math.PI * 2);
+          ctxGraph.fill();
+        }
+        if (curSolL) {
+          ctxGraph.fillStyle = '#c084fc';
+          ctxGraph.beginPath();
+          ctxGraph.arc(curX, valToY(curSolL.wingAngleDeg), 4, 0, Math.PI * 2);
+          ctxGraph.fill();
+        }
+
+        ctxGraph.restore();
+      }
+
+      // ==========================================
+      // 7. アニメーションメインループ
+      // ==========================================
+      function animationLoop(timestamp) {
+        if (!state.lastTimestamp) state.lastTimestamp = timestamp;
+        const dt = Math.min(0.1, (timestamp - state.lastTimestamp) / 1000);
+        state.lastTimestamp = timestamp;
+
+        if (state.running) {
+          state.theta += 2 * Math.PI * state.freq * dt;
+        }
+
+        const { thetaR, thetaL } = getCrankAngles(state.theta);
+        const solR = solveWingLoop('R', thetaR);
+        const solL = solveWingLoop('L', thetaL);
+
+        if (solR && solL) {
+          state.isGrashofValid = true;
+
+          if (dt > 1e-4) {
+            state.wingVelR = (solR.wingAngleDeg - state.prevWingAngleR) / dt;
+            state.wingVelL = (solL.wingAngleDeg - state.prevWingAngleL) / dt;
+          }
+          state.prevWingAngleR = solR.wingAngleDeg;
+          state.prevWingAngleL = solL.wingAngleDeg;
+
+          state.traceR.push({ x: solR.Tip.x, y: solR.Tip.y });
+          state.traceL.push({ x: solL.Tip.x, y: solL.Tip.y });
+          if (state.traceR.length > 120) state.traceR.shift();
+          if (state.traceL.length > 120) state.traceL.shift();
+        } else {
+          state.isGrashofValid = false;
+        }
+
+        renderCAD(solR, solL);
+        renderGraph(solR, solL);
+        updateHUD(solR, solL);
+
+        requestAnimationFrame(animationLoop);
+      }
+
+      // ==========================================
+      // 8. パラメータのバインド & UIイベント
+      // ==========================================
+      function initParamControls() {
+        const paramKeys = [
+          'crank', 'rod', 'rocker', 'pivotDx', 'pivotDy',
+          'hornAngle', 'spar', 'crankDist', 'phaseOffset', 'flexibility'
+        ];
+
+        paramKeys.forEach(key => {
+          const rangeEl = document.getElementById(`param_${key}`);
+          const numEl = document.getElementById(`num_${key}`);
+          const valEl = document.getElementById(`val_${key}`);
+
+          const updateValue = (newVal) => {
+            const val = parseFloat(newVal);
+            if (isNaN(val)) return;
+            state[key] = val;
+
+            if (rangeEl) rangeEl.value = val;
+            if (numEl) numEl.value = val;
+
+            if (valEl) {
+              if (key === 'hornAngle' || key === 'phaseOffset') valEl.textContent = `${val}°`;
+              else if (key === 'flexibility') valEl.textContent = `${val}%`;
+              else valEl.textContent = `${val} mm`;
+            }
+
+            state.traceR = []; state.traceL = [];
+            analyzeKinematics();
+          };
+
+          if (rangeEl) rangeEl.addEventListener('input', (e) => updateValue(e.target.value));
+          if (numEl) numEl.addEventListener('change', (e) => updateValue(e.target.value));
+        });
+
+        // 周波数
+        const freqSlider = document.getElementById('param_freq');
+        const freqVal = document.getElementById('val_freq');
+        freqSlider.addEventListener('input', (e) => {
+          state.freq = parseFloat(e.target.value);
+          freqVal.textContent = `${state.freq.toFixed(1)} Hz (${Math.round(state.freq * 60)} RPM)`;
+        });
+
+        // モーター回転方向
+        const btnDirCW = document.getElementById('btnDirCW');
+        const btnDirCCW = document.getElementById('btnDirCCW');
+        btnDirCW.addEventListener('click', () => {
+          state.motorDir = -1;
+          btnDirCW.className = 'py-1 rounded font-mono bg-sky-600 text-white font-bold flex items-center justify-center gap-1';
+          btnDirCCW.className = 'py-1 rounded font-mono text-slate-400 hover:text-white flex items-center justify-center gap-1';
+          state.traceR = []; state.traceL = [];
+          analyzeKinematics();
+        });
+        btnDirCCW.addEventListener('click', () => {
+          state.motorDir = 1;
+          btnDirCCW.className = 'py-1 rounded font-mono bg-sky-600 text-white font-bold flex items-center justify-center gap-1';
+          btnDirCW.className = 'py-1 rounded font-mono text-slate-400 hover:text-white flex items-center justify-center gap-1';
+          state.traceR = []; state.traceL = [];
+          analyzeKinematics();
+        });
+
+        // 連動方式
+        const btnModeCounter = document.getElementById('btnModeCounter');
+        const btnModeSame = document.getElementById('btnModeSame');
+        btnModeCounter.addEventListener('click', () => {
+          state.coupleMode = 'counter';
+          btnModeCounter.className = 'py-1 rounded font-medium bg-sky-600 text-white font-bold flex items-center justify-center gap-0.5';
+          btnModeSame.className = 'py-1 rounded font-medium text-slate-400 hover:text-white flex items-center justify-center gap-0.5';
+          state.traceR = []; state.traceL = [];
+          analyzeKinematics();
+        });
+        btnModeSame.addEventListener('click', () => {
+          state.coupleMode = 'same';
+          btnModeSame.className = 'py-1 rounded font-medium bg-sky-600 text-white font-bold flex items-center justify-center gap-0.5';
+          btnModeCounter.className = 'py-1 rounded font-medium text-slate-400 hover:text-white flex items-center justify-center gap-0.5';
+          state.traceR = []; state.traceL = [];
+          analyzeKinematics();
+        });
+
+        // 位相クイックボタン
+        document.querySelectorAll('.btnQuickPhase').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const p = parseFloat(btn.dataset.phase);
+            const rangeEl = document.getElementById('param_phaseOffset');
+            const numEl = document.getElementById('num_phaseOffset');
+            const valEl = document.getElementById('val_phaseOffset');
+            state.phaseOffset = p;
+            if (rangeEl) rangeEl.value = p;
+            if (numEl) numEl.value = p;
+            if (valEl) valEl.textContent = `${p}°`;
+            state.traceR = []; state.traceL = [];
+            analyzeKinematics();
+          });
+        });
+
+        // 手動クランク角シークスライダー
+        seekCrankAngle.addEventListener('input', (e) => {
+          state.running = false;
+          playIcon.className = 'fa-solid fa-play';
+          const deg = parseFloat(e.target.value);
+          state.theta = (deg * Math.PI) / 180;
+          labelCurrentAngle.textContent = `${Math.round(deg)}°`;
+        });
+
+        // 再生 / コマ送り
+        const btnTogglePlay = document.getElementById('btnTogglePlay');
+        btnTogglePlay.addEventListener('click', () => {
+          state.running = !state.running;
+          playIcon.className = state.running ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+        });
+
+        document.getElementById('btnStepFrame').addEventListener('click', () => {
+          state.running = false;
+          playIcon.className = 'fa-solid fa-play';
+          state.theta += (5 * Math.PI / 180);
+        });
+
+        // ズーム・パン
+        document.getElementById('btnZoomIn').addEventListener('click', () => state.zoom = Math.min(4.0, state.zoom * 1.2));
+        document.getElementById('btnZoomOut').addEventListener('click', () => state.zoom = Math.max(0.4, state.zoom / 1.2));
+        document.getElementById('btnResetView').addEventListener('click', () => {
+          state.zoom = 1.6;
+          state.panX = 0;
+          state.panY = 30;
+        });
+
+        // 表示トグル
+        document.getElementById('chkShowMembrane').addEventListener('change', (e) => state.showMembrane = e.target.checked);
+        document.getElementById('chkShowTrace').addEventListener('change', (e) => {
+          state.showTrace = e.target.checked;
+          if (!state.showTrace) { state.traceR = []; state.traceL = []; }
+        });
+        document.getElementById('chkShowPlate').addEventListener('change', (e) => state.showPlate = e.target.checked);
+        document.getElementById('chkShowGrid').addEventListener('change', (e) => state.showGrid = e.target.checked);
+        document.getElementById('chkShowGears').addEventListener('change', (e) => state.showGears = e.target.checked);
+
+        // プリセットセレクタ
+        document.getElementById('presetSelect').addEventListener('change', (e) => {
+          const p = PRESETS[e.target.value];
+          if (p) applyParams(p);
+        });
+
+        document.getElementById('btnResetParams').addEventListener('click', () => {
+          applyParams(PRESETS.rubber);
+          document.getElementById('presetSelect').value = 'rubber';
+        });
+
+        document.getElementById('btnLangToggle').addEventListener('click', () => {
+          currentLang = currentLang === 'ja' ? 'en' : 'ja';
+          updateLanguageUI();
+          analyzeKinematics();
+        });
+      }
+
+      function applyParams(p) {
+        Object.keys(p).forEach(key => {
+          if (state.hasOwnProperty(key)) {
+            state[key] = p[key];
+
+            const rangeEl = document.getElementById(`param_${key}`);
+            const numEl = document.getElementById(`num_${key}`);
+            const valEl = document.getElementById(`val_${key}`);
+
+            if (rangeEl) rangeEl.value = p[key];
+            if (numEl) numEl.value = p[key];
+            if (valEl) {
+              if (key === 'hornAngle' || key === 'phaseOffset') valEl.textContent = `${p[key]}°`;
+              else if (key === 'flexibility') valEl.textContent = `${p[key]}%`;
+              else valEl.textContent = `${p[key]} mm`;
+            }
+          }
+        });
+
+        const btnDirCW = document.getElementById('btnDirCW');
+        const btnDirCCW = document.getElementById('btnDirCCW');
+        if (state.motorDir === 1) {
+          btnDirCCW.className = 'py-1 rounded font-mono bg-sky-600 text-white font-bold flex items-center justify-center gap-1';
+          btnDirCW.className = 'py-1 rounded font-mono text-slate-400 hover:text-white flex items-center justify-center gap-1';
+        } else {
+          btnDirCW.className = 'py-1 rounded font-mono bg-sky-600 text-white font-bold flex items-center justify-center gap-1';
+          btnDirCCW.className = 'py-1 rounded font-mono text-slate-400 hover:text-white flex items-center justify-center gap-1';
+        }
+
+        const btnModeCounter = document.getElementById('btnModeCounter');
+        const btnModeSame = document.getElementById('btnModeSame');
+        if (state.coupleMode === 'counter') {
+          btnModeCounter.className = 'py-1 rounded font-medium bg-sky-600 text-white font-bold flex items-center justify-center gap-0.5';
+          btnModeSame.className = 'py-1 rounded font-medium text-slate-400 hover:text-white flex items-center justify-center gap-0.5';
+        } else {
+          btnModeSame.className = 'py-1 rounded font-medium bg-sky-600 text-white font-bold flex items-center justify-center gap-0.5';
+          btnModeCounter.className = 'py-1 rounded font-medium text-slate-400 hover:text-white flex items-center justify-center gap-0.5';
+        }
+
+        const freqSlider = document.getElementById('param_freq');
+        const freqVal = document.getElementById('val_freq');
+        if (freqSlider) freqSlider.value = state.freq;
+        if (freqVal) freqVal.textContent = `${state.freq.toFixed(1)} Hz (${Math.round(state.freq * 60)} RPM)`;
+
+        state.traceR = []; state.traceL = [];
+        analyzeKinematics();
+      }
+
+      // ==========================================
+      // 9. マウス操作・ドラッグ＆パン (干渉防止処理)
+      // ==========================================
+      function initInteraction() {
+        floatingToolbar.addEventListener('mousedown', (e) => e.stopPropagation());
+        floatingToolbar.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+
+        canvasContainer.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return;
+          state.isDragging = true;
+          state.dragStartX = e.clientX - state.panX;
+          state.dragStartY = e.clientY - state.panY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+          if (!state.isDragging) return;
+          state.panX = e.clientX - state.dragStartX;
+          state.panY = e.clientY - state.dragStartY;
+        });
+
+        window.addEventListener('mouseup', () => state.isDragging = false);
+
+        canvasContainer.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+          state.zoom = Math.max(0.3, Math.min(5.0, state.zoom * zoomFactor));
+        }, { passive: false });
+      }
+
+      // ==========================================
+      // 10. Canvas 自動リサイズハンドラ (見切れ根本対策)
+      // ==========================================
+      function handleResize() {
+        const dpr = window.devicePixelRatio || 1;
+
+        // メイン機構 Canvas: コンテナの実際のクライアント寸法から取得
+        const mcw = canvasContainer.clientWidth;
+        const mch = canvasContainer.clientHeight;
+        if (mcw > 0 && mch > 0) {
+          mechCanvas.width = Math.round(mcw * dpr);
+          mechCanvas.height = Math.round(mch * dpr);
+          mechCanvas.style.width = mcw + 'px';
+          mechCanvas.style.height = mch + 'px';
+          ctxMech.setTransform(1, 0, 0, 1, 0, 0);
+          ctxMech.scale(dpr, dpr);
+        }
+
+        // 下部波形 Canvas: コンテナの実際のクライアント寸法から取得
+        const gcw = graphContainer.clientWidth;
+        const gch = graphContainer.clientHeight;
+        if (gcw > 0 && gch > 0) {
+          graphCanvas.width = Math.round(gcw * dpr);
+          graphCanvas.height = Math.round(gch * dpr);
+          graphCanvas.style.width = gcw + 'px';
+          graphCanvas.style.height = gch + 'px';
+          ctxGraph.setTransform(1, 0, 0, 1, 0, 0);
+          ctxGraph.scale(dpr, dpr);
+        }
+
+        analyzeKinematics();
+      }
+
+      // ==========================================
+      // 11. スロット保存・JSON管理
+      // ==========================================
+      function initStorageAndExport() {
+        const STORAGE_KEY = 'ornithopter_design_slots';
+        const dict = () => I18N[currentLang];
+
+        const getSavedSlots = () => {
+          try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+          catch (e) { return {}; }
+        };
+
+        const renderSlotList = () => {
+          const container = document.getElementById('slotsListContainer');
+          const slots = getSavedSlots();
+          container.innerHTML = '';
+
+          const names = Object.keys(slots);
+          if (names.length === 0) {
+            container.innerHTML = `<div class="text-slate-500 py-3 text-center">${dict().noSlots}</div>`;
+            return;
+          }
+
+          names.forEach(name => {
+            const item = slots[name];
+            const div = document.createElement('div');
+            div.className = 'bg-slate-950 p-2 rounded border border-slate-800 flex items-center justify-between text-xs hover:border-slate-700 transition';
+            div.innerHTML = `
+              <div>
+                <div class="font-bold text-slate-200">${name}</div>
+                <div class="text-[10px] text-slate-500">r:${item.crank}mm / spar:${item.spar}mm / Δφ:${item.hornAngle}°</div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button class="btnLoadSlot px-2 py-1 bg-sky-600/80 hover:bg-sky-500 text-white rounded text-[11px]" data-name="${name}">${dict().load}</button>
+                <button class="btnDeleteSlot px-2 py-1 bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white rounded text-[11px]" data-name="${name}">${dict().delete}</button>
+              </div>
+            `;
+            container.appendChild(div);
+          });
+
+          container.querySelectorAll('.btnLoadSlot').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              const name = e.target.dataset.name;
+              const slots = getSavedSlots();
+              if (slots[name]) {
+                applyParams(slots[name]);
+                document.getElementById('modalSlots').classList.add('hidden');
+              }
+            });
+          });
+
+          container.querySelectorAll('.btnDeleteSlot').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              const name = e.target.dataset.name;
+              const slots = getSavedSlots();
+              delete slots[name];
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(slots));
+              renderSlotList();
+            });
+          });
+        };
+
+        const modal = document.getElementById('modalSlots');
+        document.getElementById('btnSlotsModal').addEventListener('click', () => {
+          renderSlotList();
+          modal.classList.remove('hidden');
+        });
+        document.getElementById('btnCloseModal').addEventListener('click', () => modal.classList.add('hidden'));
+        document.getElementById('btnCloseModal2').addEventListener('click', () => modal.classList.add('hidden'));
+
+        document.getElementById('btnSaveNewSlot').addEventListener('click', () => {
+          const input = document.getElementById('inputNewSlotName');
+          const name = input.value.trim();
+          if (!name) {
+            alert(dict().promptSlotName);
+            return;
+          }
+          const slots = getSavedSlots();
+          slots[name] = {
+            crank: state.crank, rod: state.rod, rocker: state.rocker,
+            pivotDx: state.pivotDx, pivotDy: state.pivotDy,
+            hornAngle: state.hornAngle, spar: state.spar,
+            crankDist: state.crankDist, phaseOffset: state.phaseOffset,
+            motorDir: state.motorDir, coupleMode: state.coupleMode,
+            freq: state.freq, flexibility: state.flexibility
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(slots));
+          input.value = '';
+          renderSlotList();
+        });
+
+        document.getElementById('btnExportJson').addEventListener('click', () => {
+          const exportData = {
+            appName: 'Ornithopter Kinematic CAD',
+            exportDate: new Date().toISOString(),
+            parameters: {
+              crank: state.crank, rod: state.rod, rocker: state.rocker,
+              pivotDx: state.pivotDx, pivotDy: state.pivotDy,
+              hornAngle: state.hornAngle, spar: state.spar,
+              crankDist: state.crankDist, phaseOffset: state.phaseOffset,
+              motorDir: state.motorDir, coupleMode: state.coupleMode,
+              freq: state.freq, flexibility: state.flexibility
+            }
+          };
+          const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `ornithopter_design_${Date.now()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('fileInputJson').addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            try {
+              const data = JSON.parse(event.target.result);
+              applyParams(data.parameters || data);
+              alert(dict().importSuccess);
+            } catch (err) {
+              alert(dict().importError);
+            }
+          };
+          reader.readAsText(file);
+          e.target.value = '';
+        });
+
+        document.getElementById('btnExportImage').addEventListener('click', () => {
+          const url = mechCanvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `ornithopter_cad_${Date.now()}.png`;
+          a.click();
+        });
+      }
+
+      // ==========================================
+      // 12. 初期化エントリポイント
+      // ==========================================
+      window.addEventListener('DOMContentLoaded', () => {
+        initParamControls();
+        initInteraction();
+        initStorageAndExport();
+
+        const ro = new ResizeObserver(() => handleResize());
+        ro.observe(canvasContainer);
+        ro.observe(graphContainer);
+        handleResize();
+
+        applyParams(PRESETS.rubber);
+        document.getElementById('presetSelect').value = 'rubber';
+
+        updateLanguageUI();
+        analyzeKinematics();
+        requestAnimationFrame(animationLoop);
+      });
+
+    })();
+  </script>
+</body>
+</html>
